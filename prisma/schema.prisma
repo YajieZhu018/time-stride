@@ -1,0 +1,96 @@
+// TimeTrack — dual-layer (planned vs actual) time tracking.
+// Schema follows spec.md; see plan for the syntax corrections applied.
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Prisma Migrate cannot run through Neon's connection pooler.
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum EventLayer {
+  PLANNED
+  ACTUAL
+}
+
+enum RecurrenceFrequency {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories Category[]
+  events     TimeEvent[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  // NULL userId means a default global category, shared by every user.
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String // Hex code e.g. "#2196F3"
+  icon      String? // Lucide icon name
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events TimeEvent[]
+
+  @@index([userId])
+}
+
+model TimeEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  title       String
+  description String?    @db.Text
+  layer       EventLayer
+
+  startTime DateTime
+  endTime   DateTime
+  duration  Int // minutes, denormalised for fast aggregation
+
+  // An ACTUAL log may point back at the PLANNED event it fulfils.
+  linkedPlannedId String?
+  linkedPlanned   TimeEvent?  @relation("PlannedToActual", fields: [linkedPlannedId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  actualLogs      TimeEvent[] @relation("PlannedToActual")
+
+  // Recurrence. Instances are expanded in memory, never persisted.
+  frequency     RecurrenceFrequency @default(ONCE)
+  rruleString   String? // iCal RRULE, e.g. "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+  recurrenceEnd DateTime?
+  // Occurrence start times (of THIS event's own series) to skip during
+  // expansion — set by "skip this occurrence" and by "edit this occurrence
+  // only", which replaces one occurrence with a standalone override row.
+  exDates DateTime[] @default([])
+  // On a synthetic in-memory instance: the real base event's id (never
+  // written to the database that way). On a persisted row, this instead
+  // marks the row as a single-occurrence override that replaced one
+  // occurrence of the series identified here.
+  parentEventId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startTime, endTime])
+  @@index([userId, layer])
+}
