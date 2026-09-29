@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarDays, Tags } from "lucide-react";
+import { useTransition } from "react";
+import { BarChart3, CalendarDays, LogOut, Tags } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { signOut } from "@/app/actions/auth";
 
 const LINKS = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
@@ -11,8 +14,9 @@ const LINKS = [
   { href: "/categories", label: "Categories", icon: Tags },
 ];
 
-export function Nav() {
+export function Nav({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
 
   return (
     <header className="border-b bg-background/95 sticky top-0 z-40 backdrop-blur">
@@ -21,7 +25,7 @@ export function Nav() {
           TimeTrack
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex flex-1 items-center gap-1">
           {LINKS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -41,6 +45,23 @@ export function Nav() {
             );
           })}
         </nav>
+
+        {userEmail && (
+          <div className="flex items-center gap-3">
+            <span className="text-muted-foreground hidden text-sm sm:inline">
+              {userEmail}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={() => startTransition(() => signOut())}
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   );
