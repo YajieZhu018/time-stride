@@ -7,19 +7,41 @@ tracks side by side on the calendar — **Planned** (what you intend to do) and
 
 ## Getting started
 
+Copy `.env.example` to `.env` and fill in:
+- `DATABASE_URL` / `DIRECT_URL` — a [Neon](https://neon.tech) Postgres
+  project (pooled vs. direct connection — see the comments in
+  `.env.example`). This is the app's only data store.
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — a
+  [Supabase](https://supabase.com) project (`Settings → API Keys`), used for
+  sign-in only; no app data lives there.
+
+In that Supabase project's `Authentication → URL Configuration`, add
+`http://localhost:3000/**` to Redirect URLs (and the same origin as Site
+URL) so the sign-in flow can complete.
+
 ```bash
 npm install
 npm run db:migrate   # applies the Prisma schema to your database
-npm run db:seed      # populates the default categories
+npm run db:seed      # populates the default categories and the owner user
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000), then sign up at
+`/signup` and confirm via the email Supabase sends. Signing up with the
+same address `npm run db:seed` seeded for the owner (see `prisma/seed.ts`)
+links to that pre-seeded user — and any data already attached to it —
+instead of creating a second account.
 
 Other useful scripts: `npm run db:studio` (browse the database),
 `npm run typecheck`, `npm run lint`.
 
 ## Features & how to use them
+
+### Signing in
+Sign up at `/signup` with a name, email, and password, then confirm via the
+link Supabase emails you. Returning visits use `/login` with that email and
+password. All app data (categories, events) stays in Neon regardless of
+who's signed in — Supabase only handles the session.
 
 ### Calendar (Day / Week / Month / Year)
 Switch views from the toolbar. Click any empty slot to create an event, or
@@ -73,5 +95,5 @@ and plain-language insight alerts (e.g. "Underestimated Work by 3.5 hrs").
 
 ## Tech stack
 
-Next.js (App Router) · TypeScript · Prisma + PostgreSQL · Tailwind CSS +
-shadcn/ui · Zustand · rrule · Recharts.
+Next.js (App Router) · TypeScript · Prisma + PostgreSQL (Neon) · Supabase
+Auth · Tailwind CSS + shadcn/ui · Zustand · rrule · Recharts.
