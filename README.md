@@ -14,6 +14,9 @@ Copy `.env.example` to `.env` and fill in:
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — a
   [Supabase](https://supabase.com) project (`Settings → API Keys`), used for
   sign-in only; no app data lives there.
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` /
+  `NEXT_PUBLIC_STRIPE_PAYMENT_LINK` / `PAYWALL_EXEMPT_EMAILS` — the
+  €9.90/month subscription (see "Subscription" below).
 
 In that Supabase project's `Authentication → URL Configuration`, add
 `http://localhost:3000/**` to Redirect URLs (and the same origin as Site
@@ -42,6 +45,22 @@ Sign up at `/signup` with a name, email, and password, then confirm via the
 link Supabase emails you. Returning visits use `/login` with that email and
 password. All app data (categories, events) stays in Neon regardless of
 who's signed in — Supabase only handles the session.
+
+### Subscription
+Using the app costs €9.90/month. After confirming your email and signing
+in you land on `/subscribe`, which links to a Stripe Payment Link; once
+Stripe confirms payment you're taken to the calendar. **Billing** in the
+top bar opens Stripe's portal to update your card or cancel. If the
+subscription ends or a renewal fails, you're sent back to `/subscribe` —
+your data is kept. Emails listed in `PAYWALL_EXEMPT_EMAILS` (the owner)
+skip the paywall.
+
+Locally and on Vercel, `NEXT_PUBLIC_STRIPE_PAYMENT_LINK` points at two
+different Payment Links (same price), because each link can redirect to
+only one origin after payment — see "Billing" in `CLAUDE.md`.
+
+In Stripe test mode, pay with card `4242 4242 4242 4242`, any future
+expiry, any CVC.
 
 ### Calendar (Day / Week / Month / Year)
 Switch views from the toolbar. Click any empty slot to create an event, or

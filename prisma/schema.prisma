@@ -33,6 +33,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Stripe billing. subscriptionStatus mirrors Stripe's own status string
+  // ("active", "trialing", "past_due", "canceled", ...); see src/lib/stripe.ts.
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus   String?
+
   categories Category[]
   events     TimeEvent[]
 }

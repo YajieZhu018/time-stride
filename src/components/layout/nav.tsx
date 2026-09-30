@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTransition } from "react";
-import { BarChart3, CalendarDays, LogOut, Tags } from "lucide-react";
+import { BarChart3, CalendarDays, CreditCard, LogOut, Tags } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth";
+import { openBillingPortal } from "@/app/actions/billing";
 
 const LINKS = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
@@ -14,7 +15,13 @@ const LINKS = [
   { href: "/categories", label: "Categories", icon: Tags },
 ];
 
-export function Nav({ userEmail }: { userEmail: string | null }) {
+export function Nav({
+  userEmail,
+  hasBilling,
+}: {
+  userEmail: string | null;
+  hasBilling: boolean;
+}) {
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
 
@@ -51,6 +58,17 @@ export function Nav({ userEmail }: { userEmail: string | null }) {
             <span className="text-muted-foreground hidden text-sm sm:inline">
               {userEmail}
             </span>
+            {hasBilling && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isPending}
+                onClick={() => startTransition(() => openBillingPortal())}
+              >
+                <CreditCard className="size-4" />
+                Billing
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

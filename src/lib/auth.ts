@@ -3,6 +3,34 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
+type SignedInUser = {
+  id: string;
+  email: string;
+  subscriptionStatus: string | null;
+};
+
+const USER_SELECT = { id: true, email: true, subscriptionStatus: true };
+
+/** Stripe subscription statuses that grant access (see src/lib/stripe.ts). */
+const ACCESS_STATUSES = new Set(["active", "trialing"]);
+
+/**
+ * Whether this user gets past the €9.90/month paywall: either their Stripe
+ * subscription is live, or their email is in PAYWALL_EXEMPT_EMAILS (the owner).
+ */
+export function hasAccess(user: SignedInUser): boolean {
+  const exempt = (process.env.PAYWALL_EXEMPT_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .includes(user.email.toLowerCase());
+
+  return (
+    exempt ||
+    (user.subscriptionStatus !== null &&
+      ACCESS_STATUSES.has(user.subscriptionStatus))
+  );
+}
+
 /**
  * The single seam between this app and "who is the current user".
  *
@@ -15,10 +43,11 @@ import { createClient } from "@/lib/supabase/server";
  * owner's first sign-in links to that existing row rather than creating a
  * second user and orphaning every event logged before login existed.
  *
- * Nothing else in the app resolves a user directly — every server action
- * calls this — so no other file needs to change if auth changes again later.
+ * This does NOT check the paywall — only /subscribe uses it directly, since
+ * that page must render for unpaid users. Everything else goes through
+ * getCurrentUserId() below.
  */
-export const getCurrentUserId = cache(async (): Promise<string> => {
+export const getSignedInUser = cache(async (): Promise<SignedInUser> => {
   const supabase = await createClient();
   const {
     data: { user: authUser },
@@ -33,14 +62,14 @@ export const getCurrentUserId = cache(async (): Promise<string> => {
 
   const existing = await prisma.user.findUnique({
     where: { email: authUser.email },
-    select: { id: true },
+    select: USER_SELECT,
   });
 
   if (existing) {
-    return existing.id;
+    return existing;
   }
 
-  const created = await prisma.user.create({
+  return prisma.user.create({
     data: {
       email: authUser.email,
       name:
@@ -48,8 +77,21 @@ export const getCurrentUserId = cache(async (): Promise<string> => {
         (authUser.user_metadata?.name as string | undefined) ??
         null,
     },
-    select: { id: true },
+    select: USER_SELECT,
   });
+});
 
-  return created.id;
+/**
+ * The current user's id, for every server action and dashboard page. Sends
+ * anyone without access (see hasAccess) to /subscribe, so the paywall covers
+ * the whole app from this one place — nothing else resolves a user directly.
+ */
+export const getCurrentUserId = cache(async (): Promise<string> => {
+  const user = await getSignedInUser();
+
+  if (!hasAccess(user)) {
+    redirect("/subscribe");
+  }
+
+  return user.id;
 });

@@ -43,8 +43,11 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname === "/signup";
   const isAuthRoute =
     isSignedOutOnlyRoute || request.nextUrl.pathname.startsWith("/auth");
+  // Stripe calls this with no session cookie; the route verifies Stripe's
+  // signature itself.
+  const isWebhook = request.nextUrl.pathname === "/api/stripe/webhook";
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isAuthRoute && !isWebhook) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", request.nextUrl.pathname);
