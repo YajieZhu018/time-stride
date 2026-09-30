@@ -46,3 +46,6 @@ spec.md
 
 # superbase server
 .mcp.json
+
+# playwright mcp output
+.playwright-mcp/
