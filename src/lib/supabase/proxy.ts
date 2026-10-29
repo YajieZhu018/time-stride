@@ -40,7 +40,8 @@ export async function updateSession(request: NextRequest) {
 
   const isSignedOutOnlyRoute =
     request.nextUrl.pathname === "/login" ||
-    request.nextUrl.pathname === "/signup";
+    request.nextUrl.pathname === "/signup" ||
+    request.nextUrl.pathname === "/forgot-password";
   const isAuthRoute =
     isSignedOutOnlyRoute || request.nextUrl.pathname.startsWith("/auth");
 

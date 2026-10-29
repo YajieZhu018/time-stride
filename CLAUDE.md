@@ -23,6 +23,11 @@ untouched by auth — Supabase only issues the session cookie.
   - `token_hash` + `type` — what a template customised to link straight to
     this route would send instead (no same-browser requirement, unlike the
     PKCE `code` path).
+- Password reset: `/login` → `/forgot-password` calls
+  `resetPasswordForEmail` with `redirectTo=/auth/confirm?next=/reset-password`;
+  `/auth/confirm` exchanges the PKCE `code` for a session, then
+  `/reset-password` calls `updateUser({ password })`. Same default-template
+  and same-browser caveats as sign-up confirmation apply.
 - Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   (see `.env.example`). Both are meant to be public — the anon/publishable
   key carries no privilege; every server action still scopes queries by
@@ -34,7 +39,6 @@ untouched by auth — Supabase only issues the session cookie.
   Redirect URLs.
 
 ### Known follow-ups (not urgent, tracked here so they aren't re-discovered)
-- No password-reset flow yet.
 - Supabase's shared email service is rate-limited and not meant for
   production; set up custom SMTP before relying on this for anyone but the
   owner.
