@@ -59,14 +59,14 @@ export function CalendarToolbar({ onNewEvent }: { onNewEvent: () => void }) {
             <ChevronRight className="size-4" />
           </Button>
         </div>
-        <h1 className="font-heading text-lg font-semibold">
+        <h1 className="font-heading text-base font-semibold sm:text-lg">
           {labelFor(anchorDate, view)}
         </h1>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Select value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
-          <SelectTrigger className="w-40" aria-label="Layer filter">
+          <SelectTrigger className="w-36 sm:w-40" aria-label="Layer filter">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -88,7 +88,8 @@ export function CalendarToolbar({ onNewEvent }: { onNewEvent: () => void }) {
 
         <Button onClick={onNewEvent}>
           <Plus className="size-4" />
-          New event
+          <span className="hidden sm:inline">New event</span>
+          <span className="sr-only sm:hidden">New event</span>
         </Button>
       </div>
     </div>

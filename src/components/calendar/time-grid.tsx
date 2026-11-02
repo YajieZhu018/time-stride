@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { endOfDay, format, isSameDay, startOfDay } from "date-fns";
 import {
   DndContext,
@@ -22,6 +22,18 @@ import {
 import type { EventLayer, TimeEvent, ViewFilterMode } from "@/types";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+/** Width of the hour-label gutter, and the narrowest a single track may get
+ *  before the grid scrolls sideways instead of squeezing (phones, week view). */
+const GUTTER_PX = 48;
+const MIN_TRACK_PX = 64;
+
+/** "7 AM" / "12 PM", Google-Calendar style. */
+function hourLabel(hour: number): string {
+  if (hour === 0) return "";
+  const suffix = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 || 12} ${suffix}`;
+}
 
 interface TimeGridProps {
   days: Date[];
@@ -59,6 +71,14 @@ export function TimeGrid({
   const scrollRef = useRef<HTMLDivElement>(null);
   const layers = tracksFor(filter);
 
+  // Ticks once a minute so the "now" line creeps down without re-rendering
+  // every second.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // A small activation distance lets a plain click still register as a click
   // rather than being swallowed as a zero-length drag.
   const sensors = useSensors(
@@ -80,10 +100,17 @@ export function TimeGrid({
     );
   }
 
+  // Land one hour above "now" when today is on screen, so the current moment
+  // is visible; otherwise fall back to the start of a normal day.
+  const showsToday = days.some((day) => isSameDay(day, new Date()));
   useEffect(() => {
     const node = scrollRef.current;
-    if (node) node.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT;
-  }, []);
+    if (!node) return;
+    const hour = showsToday
+      ? Math.max(0, new Date().getHours() - 1)
+      : DEFAULT_SCROLL_HOUR;
+    node.scrollTop = hour * HOUR_HEIGHT;
+  }, [showsToday]);
 
   const eventsByDay = useMemo(() => {
     return days.map((day) => {
@@ -130,30 +157,37 @@ export function TimeGrid({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border">
+     <div
+      style={{ minWidth: GUTTER_PX + days.length * layers.length * MIN_TRACK_PX }}
+     >
       {/* Day headers, held above the scrolling body. */}
-      <div className="bg-muted/40 flex border-b">
-        <div className="w-14 shrink-0 border-r" />
+      <div className="bg-background flex border-b">
+        <div className="shrink-0 border-r" style={{ width: GUTTER_PX }} />
         {days.map((day) => {
           const today = isSameDay(day, new Date());
           return (
             <div
               key={day.toISOString()}
               className={cn(
-                "flex-1 border-r px-2 py-2 text-center last:border-r-0",
-                today && "bg-primary/10",
+                "flex-1 border-r px-1 py-2 text-center last:border-r-0",
               )}
             >
-              <div className="text-muted-foreground text-xs uppercase">
+              <div
+                className={cn(
+                  "text-muted-foreground text-[11px] font-medium uppercase",
+                  today && "text-primary",
+                )}
+              >
                 {format(day, "EEE")}
               </div>
               <div
                 className={cn(
-                  "text-sm font-semibold",
-                  today && "text-primary",
+                  "mx-auto mt-0.5 flex size-8 items-center justify-center rounded-full text-base font-medium",
+                  today && "bg-primary text-primary-foreground",
                 )}
               >
-                {format(day, "d MMM")}
+                {format(day, "d")}
               </div>
             </div>
           );
@@ -162,7 +196,7 @@ export function TimeGrid({
 
       {filter === "BOTH" ? (
         <div className="text-muted-foreground bg-muted/20 flex border-b text-[10px] uppercase tracking-wide">
-          <div className="w-14 shrink-0 border-r" />
+          <div className="shrink-0 border-r" style={{ width: GUTTER_PX }} />
           {days.map((day) => (
             <div key={day.toISOString()} className="flex flex-1 border-r last:border-r-0">
               <div className="flex-1 border-r px-1 py-0.5 text-center">Plan</div>
@@ -172,19 +206,22 @@ export function TimeGrid({
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="max-h-[calc(100vh-19rem)] overflow-y-auto">
+      <div
+        ref={scrollRef}
+        className="h-[calc(100dvh-15rem)] min-h-80 overflow-y-auto overscroll-contain sm:h-auto sm:max-h-[calc(100dvh-19rem)]"
+      >
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex">
           {/* Hour gutter */}
-          <div className="w-14 shrink-0 border-r">
+          <div className="shrink-0 border-r" style={{ width: GUTTER_PX }}>
             {HOURS.map((hour) => (
               <div
                 key={hour}
                 className="text-muted-foreground relative text-[10px]"
                 style={{ height: HOUR_HEIGHT }}
               >
-                <span className="absolute -top-1.5 right-1">
-                  {hour === 0 ? "" : `${String(hour).padStart(2, "0")}:00`}
+                <span className="absolute -top-1.5 right-1.5">
+                  {hourLabel(hour)}
                 </span>
               </div>
             ))}
@@ -202,6 +239,14 @@ export function TimeGrid({
                   key={hour}
                   className="border-border/60 pointer-events-none absolute inset-x-0 border-t"
                   style={{ top: hour * HOUR_HEIGHT }}
+                />
+              ))}
+              {/* Faint half-hour guides */}
+              {HOURS.map((hour) => (
+                <div
+                  key={`half-${hour}`}
+                  className="border-border/30 pointer-events-none absolute inset-x-0 border-t border-dotted"
+                  style={{ top: (hour + 0.5) * HOUR_HEIGHT }}
                 />
               ))}
 
@@ -230,11 +275,25 @@ export function TimeGrid({
                   </div>
                 ))}
               </div>
+
+              {isSameDay(day, now) ? (
+                <div
+                  className="pointer-events-none absolute inset-x-0 z-20 border-t-2 border-red-500"
+                  style={{
+                    top:
+                      ((now.getHours() * 60 + now.getMinutes()) / 60) *
+                      HOUR_HEIGHT,
+                  }}
+                >
+                  <span className="absolute -top-[5px] -left-1 size-2 rounded-full bg-red-500" />
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
       </DndContext>
       </div>
+     </div>
     </div>
   );
 }

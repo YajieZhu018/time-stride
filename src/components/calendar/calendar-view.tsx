@@ -21,6 +21,12 @@ export function CalendarView({ categories }: { categories: Category[] }) {
   const rangeStartMs = range.start.getTime();
   const rangeEndMs = range.end.getTime();
 
+  // Seven days × two tracks can't fit a phone; open on the day view there.
+  // Runs once, so switching to week afterwards still sticks.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 639px)").matches) setView("day");
+  }, [setView]);
+
   const [events, setEvents] = useState<TimeEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
