@@ -43,3 +43,31 @@ untouched by auth — Supabase only issues the session cookie.
   production; set up custom SMTP before relying on this for anyone but the
   owner.
 - Signup is currently open to any email, not restricted to the owner.
+
+## Calendar grid (`src/components/calendar/`)
+
+Google-Calendar-style day/week grid, built to work on a phone.
+
+- `time-grid.tsx` — hour gutter ("7 AM" labels), faint half-hour guides, a red
+  "now" line (ticks each minute), and an initial scroll to one hour before the
+  current time. Columns always squeeze to the screen width (no sideways
+  scrolling); on phones the gutter, headers and event text shrink and event
+  times are hidden.
+- Full-screen mode: the expand button in `calendar-toolbar.tsx` (Day/Week only)
+  opens a portalled `fixed inset-0` overlay in `calendar-view.tsx` that renders
+  `<TimeGrid fit />`. In `fit` mode the hour height is measured
+  (`clientHeight / 24` via `ResizeObserver`) so all 24 hours and every day show
+  with no scrolling; labels/half-hour guides thin out when rows get tight. It
+  also requests browser fullscreen + landscape lock where supported (Android
+  Chrome; iOS Safari just gets the overlay).
+- `EventBlock` and `geometryFor` take an `hourHeight` prop (default
+  `HOUR_HEIGHT`) rather than reading the constant, so the same code serves
+  normal and fit modes.
+- On phones (`max-width: 639px`) the calendar opens on the Day view instead of
+  Week.
+- The nav and toolbar buttons are icon-only below the `sm` breakpoint.
+
+### Deployment gotcha
+Vercel Preview deployments don't get Production-only env vars; a branch preview
+500s until `DATABASE_URL`, `DIRECT_URL` and the `NEXT_PUBLIC_SUPABASE_*` vars
+also have Preview ticked (and a redeploy). Simplest: test on production.
