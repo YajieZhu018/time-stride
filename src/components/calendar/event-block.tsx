@@ -6,7 +6,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { isSyntheticInstance } from "@/lib/rrule-utils";
 import type { PositionedEvent } from "@/lib/layout-utils";
-import { HOUR_HEIGHT, PIXELS_PER_MINUTE } from "@/components/calendar/grid-constants";
+import { HOUR_HEIGHT } from "@/components/calendar/grid-constants";
 import { minutesFromMidnight, snapToGrid } from "@/lib/time-utils";
 import type { TimeEvent } from "@/types";
 
@@ -42,6 +42,7 @@ export function geometryFor(
   positioned: PositionedEvent,
   dayStart: Date,
   dayEnd: Date,
+  hourHeight: number = HOUR_HEIGHT,
 ): EventBlockGeometry {
   const { event, column, columns } = positioned;
 
@@ -55,13 +56,13 @@ export function geometryFor(
       // An event ending exactly at midnight reads as minute 0; treat as 1440.
       (event.endTime > event.startTime ? 24 * 60 : 0);
 
-  const top = (startMinutes / 60) * HOUR_HEIGHT;
-  const rawHeight = ((endMinutes - startMinutes) / 60) * HOUR_HEIGHT;
+  const top = (startMinutes / 60) * hourHeight;
+  const rawHeight = ((endMinutes - startMinutes) / 60) * hourHeight;
 
   return {
     top,
     // Keep very short events clickable.
-    height: Math.max(rawHeight, 14),
+    height: Math.max(rawHeight, Math.min(14, hourHeight * 0.4)),
     left: `${(column / columns) * 100}%`,
     width: `${100 / columns}%`,
   };
@@ -73,18 +74,22 @@ export function EventBlock({
   positioned,
   dayStart,
   dayEnd,
+  hourHeight = HOUR_HEIGHT,
   onSelect,
   onCommitTime,
 }: {
   positioned: PositionedEvent;
   dayStart: Date;
   dayEnd: Date;
+  /** Pixel height of one hour; the full-screen view shrinks it to fit. */
+  hourHeight?: number;
   onSelect?: (event: TimeEvent) => void;
   /** Fired once a drag or resize ends, with the new times already snapped. */
   onCommitTime?: (event: TimeEvent, startTime: Date, endTime: Date) => void;
 }) {
   const { event } = positioned;
-  const geometry = geometryFor(positioned, dayStart, dayEnd);
+  const geometry = geometryFor(positioned, dayStart, dayEnd, hourHeight);
+  const pixelsPerMinute = hourHeight / 60;
   const isPlanned = event.layer === "PLANNED";
 
   // Expanded recurring instances don't exist as their own database row (see
@@ -129,7 +134,7 @@ export function EventBlock({
         const state = resizeStateRef.current;
         if (!state) return;
         const deltaY = moveEvent.clientY - state.startY;
-        const offsetMinutes = snapToGrid(deltaY / PIXELS_PER_MINUTE);
+        const offsetMinutes = snapToGrid(deltaY / pixelsPerMinute);
         state.offsetMinutes = offsetMinutes;
         setResize({ edge: state.edge, offsetMinutes });
       }
@@ -165,20 +170,20 @@ export function EventBlock({
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", handleUp);
     },
-    [isInstance, event, onCommitTime],
+    [isInstance, event, onCommitTime, pixelsPerMinute],
   );
 
   // Live-preview geometry: resize offsets one edge only; drag translates the
   // whole block via a CSS transform (dnd-kit) rather than touching geometry.
   const previewTop =
-    resize?.edge === "top" ? geometry.top + resize.offsetMinutes * PIXELS_PER_MINUTE : geometry.top;
+    resize?.edge === "top" ? geometry.top + resize.offsetMinutes * pixelsPerMinute : geometry.top;
   const previewHeight =
     resize && resize.offsetMinutes !== 0
       ? Math.max(
-          14,
+          Math.min(14, hourHeight * 0.4),
           resize.edge === "top"
-            ? geometry.height - resize.offsetMinutes * PIXELS_PER_MINUTE
-            : geometry.height + resize.offsetMinutes * PIXELS_PER_MINUTE,
+            ? geometry.height - resize.offsetMinutes * pixelsPerMinute
+            : geometry.height + resize.offsetMinutes * pixelsPerMinute,
         )
       : geometry.height;
 
@@ -206,7 +211,7 @@ export function EventBlock({
         onClick={() => onSelect?.(event)}
         title={`${event.title} · ${format(event.startTime, "HH:mm")}–${format(event.endTime, "HH:mm")}`}
         className={cn(
-          "group relative flex size-full flex-col overflow-hidden rounded-md px-1.5 py-0.5 text-left text-xs leading-tight transition-shadow",
+          "group relative flex size-full flex-col overflow-hidden rounded-md px-0.5 py-0.5 text-left text-[10px] leading-tight sm:px-1.5 sm:text-xs transition-shadow",
           "hover:ring-ring/60 hover:ring-2 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
           isPlanned
             ? "border border-dashed text-foreground/90"
@@ -225,7 +230,7 @@ export function EventBlock({
       >
         <span className="truncate font-medium">{event.title}</span>
         {compact ? null : (
-          <span className={cn("truncate", isPlanned ? "text-muted-foreground" : "text-white/80")}>
+          <span className={cn("hidden truncate sm:block", isPlanned ? "text-muted-foreground" : "text-white/80")}>
             {format(event.startTime, "HH:mm")}–{format(event.endTime, "HH:mm")}
           </span>
         )}

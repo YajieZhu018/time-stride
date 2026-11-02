@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,7 +30,13 @@ function labelFor(anchor: Date, view: CalendarViewMode): string {
     : `${format(start, "d MMM")} – ${format(end, "d MMM yyyy")}`;
 }
 
-export function CalendarToolbar({ onNewEvent }: { onNewEvent: () => void }) {
+export function CalendarToolbar({
+  onNewEvent,
+  onFullscreen,
+}: {
+  onNewEvent: () => void;
+  onFullscreen: () => void;
+}) {
   const { anchor, view, filter, setView, setFilter, step, goToday } =
     useCalendar();
   const anchorDate = new Date(anchor);
@@ -85,6 +91,18 @@ export function CalendarToolbar({ onNewEvent }: { onNewEvent: () => void }) {
             ))}
           </TabsList>
         </Tabs>
+
+        {view === "day" || view === "week" ? (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Full screen"
+            title="Full screen"
+            onClick={onFullscreen}
+          >
+            <Maximize2 className="size-4" />
+          </Button>
+        ) : null}
 
         <Button onClick={onNewEvent}>
           <Plus className="size-4" />

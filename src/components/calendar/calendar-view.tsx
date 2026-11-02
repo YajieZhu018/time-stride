@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { TimeGrid } from "@/components/calendar/time-grid";
 import { MonthView } from "@/components/calendar/month-view";
@@ -11,6 +14,7 @@ import { EventDialog, type EventDraft } from "@/components/calendar/event-dialog
 import { useCalendar } from "@/store/use-calendar";
 import { getEventsInRange, updateEventTime } from "@/app/actions/events";
 import { daysInRange, rangeForView } from "@/lib/time-utils";
+import { format } from "date-fns";
 import type { Category, EventLayer, TimeEvent } from "@/types";
 
 export function CalendarView({ categories }: { categories: Category[] }) {
@@ -29,6 +33,7 @@ export function CalendarView({ categories }: { categories: Category[] }) {
 
   const [events, setEvents] = useState<TimeEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<EventDraft | null>(null);
 
@@ -53,6 +58,38 @@ export function CalendarView({ categories }: { categories: Category[] }) {
     categoryIds.length === 0
       ? events
       : events.filter((event) => categoryIds.includes(event.categoryId));
+
+  // Best effort: real browser fullscreen + landscape where the device allows
+  // it (Android Chrome); the fixed overlay below works regardless (iOS Safari).
+  function enterFullscreen() {
+    setFullscreen(true);
+    document.documentElement.requestFullscreen?.().then(
+      // `lock` isn't in TypeScript's DOM typings yet.
+      () =>
+        (screen.orientation as ScreenOrientation & {
+          lock?: (orientation: string) => Promise<void>;
+        })
+          .lock?.("landscape")
+          .catch(() => {}),
+      () => {},
+    );
+  }
+
+  function exitFullscreen() {
+    setFullscreen(false);
+    screen.orientation?.unlock?.();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+
+  // Leaving browser fullscreen with the system gesture / Esc closes the overlay.
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onChange() {
+      if (!document.fullscreenElement) setFullscreen(false);
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [fullscreen]);
 
   function openCreate(start: Date, layer: EventLayer) {
     setDraft({ start, layer });
@@ -97,7 +134,10 @@ export function CalendarView({ categories }: { categories: Category[] }) {
 
   return (
     <div className="space-y-4">
-      <CalendarToolbar onNewEvent={openNewFromToolbar} />
+      <CalendarToolbar
+        onNewEvent={openNewFromToolbar}
+        onFullscreen={enterFullscreen}
+      />
 
       {isLoading ? (
         <div className="text-muted-foreground py-16 text-center text-sm">
@@ -127,6 +167,41 @@ export function CalendarView({ categories }: { categories: Category[] }) {
           onCommitTime={commitTime}
         />
       )}
+
+      {/* Portalled to <body> so it sits above the fixed timer bar. */}
+      {fullscreen && (view === "day" || view === "week")
+        ? createPortal(
+            <div className="bg-background fixed inset-0 z-50 flex flex-col gap-1 p-2">
+              <div className="flex items-center justify-between">
+                <span className="font-heading text-sm font-semibold">
+                  {view === "day"
+                    ? format(anchorDate, "EEEE, d MMMM yyyy")
+                    : `${format(range.start, "d MMM")} – ${format(range.end, "d MMM yyyy")}`}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Exit full screen"
+                  onClick={exitFullscreen}
+                >
+                  <Minimize2 className="size-4" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <TimeGrid
+                  fit
+                  days={view === "day" ? [anchorDate] : daysInRange(range)}
+                  events={visibleEvents}
+                  filter={filter}
+                  onSelectEvent={openEdit}
+                  onCreateAt={openCreate}
+                  onCommitTime={commitTime}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <EventDialog
         open={dialogOpen}
