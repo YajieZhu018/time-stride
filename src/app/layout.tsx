@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Roboto_Condensed } from "next/font/google";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -14,6 +14,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Event titles in the full-screen grid: narrow enough to fit a phone's week
+// columns, with a large x-height that stays legible at 10px.
+const robotoCondensed = Roboto_Condensed({
+  variable: "--font-roboto-condensed",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "TimeTrack",
   description: "Plan your time, track what actually happened, see the gap.",
@@ -23,7 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${robotoCondensed.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}

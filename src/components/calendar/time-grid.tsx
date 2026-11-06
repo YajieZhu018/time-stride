@@ -13,7 +13,10 @@ import {
 import { cn } from "@/lib/utils";
 import { packOverlaps } from "@/lib/layout-utils";
 import { overlapsRange, snapToGrid } from "@/lib/time-utils";
-import { EventBlock } from "@/components/calendar/event-block";
+import {
+  EventBlock,
+  stackDenseBlocks,
+} from "@/components/calendar/event-block";
 import {
   DEFAULT_SCROLL_HOUR,
   HOUR_HEIGHT,
@@ -141,20 +144,28 @@ export function TimeGrid({
         dayStart,
         dayEnd,
         byLayer: Object.fromEntries(
-          layers.map((layer) => [
-            layer,
-            packOverlaps(
+          layers.map((layer) => {
+            const positioned = packOverlaps(
               events.filter(
                 (event) =>
                   event.layer === layer &&
                   overlapsRange(event.startTime, event.endTime, range),
               ),
-            ),
-          ]),
+            );
+            return [
+              layer,
+              {
+                positioned,
+                stacked: fit
+                  ? stackDenseBlocks(positioned, dayStart, dayEnd, hourHeight)
+                  : undefined,
+              },
+            ];
+          }),
         ),
       };
     });
-  }, [days, events, layers]);
+  }, [days, events, layers, fit, hourHeight]);
 
   /** Translate a click inside a track into a snapped start time. */
   function handleTrackClick(
@@ -186,7 +197,11 @@ export function TimeGrid({
             <div
               key={day.toISOString()}
               className={cn(
-                "min-w-0 flex-1 border-r px-0.5 py-1.5 text-center last:border-r-0 sm:px-1 sm:py-2",
+                "min-w-0 flex-1 border-r px-0.5 text-center last:border-r-0 sm:px-1",
+                // One line in full screen, so the hours get that height back.
+                fit
+                  ? "flex items-center justify-center gap-1 py-0.5"
+                  : "py-1.5 sm:py-2",
               )}
             >
               <div
@@ -199,7 +214,10 @@ export function TimeGrid({
               </div>
               <div
                 className={cn(
-                  "mx-auto mt-0.5 flex size-7 items-center justify-center rounded-full text-sm font-medium sm:size-8 sm:text-base",
+                  "flex items-center justify-center rounded-full font-medium",
+                  fit
+                    ? "size-5 text-xs"
+                    : "mx-auto mt-0.5 size-7 text-sm sm:size-8 sm:text-base",
                   today && "bg-primary text-primary-foreground",
                 )}
               >
@@ -287,13 +305,17 @@ export function TimeGrid({
                       handleTrackClick(clickEvent, day, layer)
                     }
                   >
-                    {byLayer[layer]?.map((positioned) => (
+                    {byLayer[layer]?.positioned.map((positioned) => (
                       <EventBlock
                         key={positioned.event.id}
                         positioned={positioned}
                         dayStart={dayStart}
                         dayEnd={dayEnd}
                         hourHeight={hourHeight}
+                        dense={fit}
+                        stackedGeometry={byLayer[layer]?.stacked?.get(
+                          positioned.event.id,
+                        )}
                         onSelect={onSelectEvent}
                         onCommitTime={onCommitTime}
                       />

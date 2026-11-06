@@ -63,6 +63,14 @@ Google-Calendar-style day/week grid, built to work on a phone.
 - `EventBlock` and `geometryFor` take an `hourHeight` prop (default
   `HOUR_HEIGHT`) rather than reading the constant, so the same code serves
   normal and fit modes.
+- Fit mode passes `dense` to `EventBlock`: titles use Roboto Condensed at 10px
+  (`font-condensed`, loaded in `src/app/layout.tsx`), wrap at spaces in whole
+  lines, and the block is at least one line (12px) tall. `flex-none` on the
+  title matters: as a clipped flex item it otherwise collapses to nothing and
+  the block shows plain colour.
+- `stackDenseBlocks` nudges blocks in fit mode so short back-to-back events
+  don't cover each other, so a block's position there can sit a little off its
+  true time; on a very full day in a short viewport it can be well over an hour.
 - On phones (`max-width: 639px`) the calendar opens on the Day view instead of
   Week.
 - The nav and toolbar buttons are icon-only below the `sm` breakpoint.

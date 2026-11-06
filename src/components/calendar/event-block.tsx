@@ -26,6 +26,17 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Line height of a title in the full-screen grid; matches `leading-[11px]`. */
+const DENSE_LINE_HEIGHT = 11;
+
+/** Shortest a full-screen block may render: one whole line of title. */
+const DENSE_MIN_BLOCK_HEIGHT = 12;
+
+/** Shortest a block may render, which also keeps it clickable. */
+function minBlockHeight(hourHeight: number, dense: boolean): number {
+  return dense ? DENSE_MIN_BLOCK_HEIGHT : Math.min(14, hourHeight * 0.4);
+}
+
 export interface EventBlockGeometry {
   top: number;
   height: number;
@@ -43,6 +54,7 @@ export function geometryFor(
   dayStart: Date,
   dayEnd: Date,
   hourHeight: number = HOUR_HEIGHT,
+  dense = false,
 ): EventBlockGeometry {
   const { event, column, columns } = positioned;
 
@@ -62,10 +74,85 @@ export function geometryFor(
   return {
     top,
     // Keep very short events clickable.
-    height: Math.max(rawHeight, Math.min(14, hourHeight * 0.4)),
+    height: Math.max(rawHeight, minBlockHeight(hourHeight, dense)),
     left: `${(column / columns) * 100}%`,
     width: `${100 / columns}%`,
   };
+}
+
+/**
+ * Geometry for every block of one full-screen track. There, a 30-minute event
+ * is only a few pixels tall but is drawn one text line high, so it would cover
+ * whatever starts right after it. Each block is pushed just below the blocks
+ * above it instead, trimming its own top so it still ends on time, which keeps
+ * every title readable at full width for a few pixels of timeline accuracy.
+ * If that runs past midnight, a second pass from the bottom pulls blocks back
+ * up, squeezing long ones, so the day's last events never fall off the grid.
+ */
+export function stackDenseBlocks(
+  track: PositionedEvent[],
+  dayStart: Date,
+  dayEnd: Date,
+  hourHeight: number,
+): Map<string, EventBlockGeometry> {
+  const geometries = new Map<string, EventBlockGeometry>();
+  const placed: {
+    positioned: PositionedEvent;
+    top: number;
+    bottom: number;
+  }[] = [];
+
+  const sharesWidth = (a: PositionedEvent, b: PositionedEvent) =>
+    a.column / a.columns < (b.column + 1) / b.columns &&
+    b.column / b.columns < (a.column + 1) / a.columns;
+
+  // packOverlaps returns blocks in start-time order.
+  for (const positioned of track) {
+    const natural = geometryFor(positioned, dayStart, dayEnd, hourHeight, true);
+    const top = placed.reduce(
+      (lowest, above) =>
+        sharesWidth(above.positioned, positioned)
+          ? Math.max(lowest, above.bottom)
+          : lowest,
+      natural.top,
+    );
+    const bottom = Math.max(
+      natural.top + natural.height,
+      top + DENSE_MIN_BLOCK_HEIGHT,
+    );
+
+    placed.push({ positioned, top, bottom });
+  }
+
+  for (let index = placed.length - 1; index >= 0; index--) {
+    const block = placed[index];
+    const limit = placed
+      .slice(index + 1)
+      .reduce(
+        (highest, below) =>
+          sharesWidth(below.positioned, block.positioned)
+            ? Math.min(highest, below.top)
+            : highest,
+        24 * hourHeight,
+      );
+    block.bottom = Math.min(block.bottom, limit);
+    block.top = Math.min(block.top, block.bottom - DENSE_MIN_BLOCK_HEIGHT);
+
+    const natural = geometryFor(
+      block.positioned,
+      dayStart,
+      dayEnd,
+      hourHeight,
+      true,
+    );
+    geometries.set(block.positioned.event.id, {
+      ...natural,
+      top: block.top,
+      height: block.bottom - block.top,
+    });
+  }
+
+  return geometries;
 }
 
 type ResizeEdge = "top" | "bottom";
@@ -75,6 +162,8 @@ export function EventBlock({
   dayStart,
   dayEnd,
   hourHeight = HOUR_HEIGHT,
+  dense = false,
+  stackedGeometry,
   onSelect,
   onCommitTime,
 }: {
@@ -83,12 +172,18 @@ export function EventBlock({
   dayEnd: Date;
   /** Pixel height of one hour; the full-screen view shrinks it to fit. */
   hourHeight?: number;
+  /** Full-screen grid: condensed titles that wrap to use the block's height. */
+  dense?: boolean;
+  /** Position from `stackDenseBlocks`, replacing the block's natural one. */
+  stackedGeometry?: EventBlockGeometry;
   onSelect?: (event: TimeEvent) => void;
   /** Fired once a drag or resize ends, with the new times already snapped. */
   onCommitTime?: (event: TimeEvent, startTime: Date, endTime: Date) => void;
 }) {
   const { event } = positioned;
-  const geometry = geometryFor(positioned, dayStart, dayEnd, hourHeight);
+  const geometry =
+    stackedGeometry ??
+    geometryFor(positioned, dayStart, dayEnd, hourHeight, dense);
   const pixelsPerMinute = hourHeight / 60;
   const isPlanned = event.layer === "PLANNED";
 
@@ -180,7 +275,7 @@ export function EventBlock({
   const previewHeight =
     resize && resize.offsetMinutes !== 0
       ? Math.max(
-          Math.min(14, hourHeight * 0.4),
+          minBlockHeight(hourHeight, dense),
           resize.edge === "top"
             ? geometry.height - resize.offsetMinutes * pixelsPerMinute
             : geometry.height + resize.offsetMinutes * pixelsPerMinute,
@@ -188,6 +283,11 @@ export function EventBlock({
       : geometry.height;
 
   const compact = previewHeight < 34;
+  // Whole lines only, so a block never shows half a line of text.
+  const denseTitleLines = Math.max(
+    1,
+    Math.floor(previewHeight / DENSE_LINE_HEIGHT),
+  );
 
   return (
     <div
@@ -211,10 +311,19 @@ export function EventBlock({
         onClick={() => onSelect?.(event)}
         title={`${event.title} · ${format(event.startTime, "HH:mm")}–${format(event.endTime, "HH:mm")}`}
         className={cn(
-          "group relative flex size-full flex-col overflow-hidden rounded-md px-0.5 py-0.5 text-left text-[10px] leading-tight sm:px-1.5 sm:text-xs transition-shadow",
+          "group relative flex size-full flex-col overflow-hidden rounded-md text-left transition-shadow",
+          dense
+            ? "font-condensed rounded-sm px-px py-0 text-[10px] leading-[11px]"
+            : "px-0.5 py-0.5 text-[10px] leading-tight sm:px-1.5 sm:text-xs",
           "hover:ring-ring/60 hover:ring-2 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
           isPlanned
-            ? "border border-dashed text-foreground/90"
+            ? cn(
+                "text-foreground/90",
+                // An outline takes no space, leaving a 12px block its full line.
+                dense
+                  ? "outline-1 -outline-offset-1 outline-dashed"
+                  : "border border-dashed",
+              )
             : "text-white shadow-sm",
           !isInstance && "touch-none",
           (isDragging || resize) && "opacity-80 shadow-lg",
@@ -224,11 +333,23 @@ export function EventBlock({
             ? {
                 backgroundColor: withAlpha(event.category.color, 0.18),
                 borderColor: event.category.color,
+                outlineColor: event.category.color,
               }
             : { backgroundColor: event.category.color }
         }
       >
-        <span className="truncate font-medium">{event.title}</span>
+        {dense ? (
+          // flex-none: a clipped flex item would otherwise collapse to nothing
+          // in a short block, leaving plain colour with no title.
+          <span
+            className="flex-none overflow-hidden font-medium"
+            style={{ maxHeight: denseTitleLines * DENSE_LINE_HEIGHT }}
+          >
+            {event.title}
+          </span>
+        ) : (
+          <span className="truncate font-medium">{event.title}</span>
+        )}
         {compact ? null : (
           <span className={cn("hidden truncate sm:block", isPlanned ? "text-muted-foreground" : "text-white/80")}>
             {format(event.startTime, "HH:mm")}–{format(event.endTime, "HH:mm")}
